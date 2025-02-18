@@ -1,0 +1,93 @@
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--serversTransport.insecureSkipVerify=true'
+      - '--entrypoints.web.address=:80'
+      - '--entryPoints.web.forwardedHeaders.insecure'
+    ports:
+      - '80:80'
+      - '8080:8080'
+    networks:
+      - traefik
+      - mongo
+      - rabbitmq
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+  mongo:
+    container_name: mongo
+    image: mongo:4.2.24-bionic
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: logs
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    networks:
+      - mongo
+    volumes:
+      - ./db-data/mongo/:/data/db
+
+  mongo-express:
+    container_name: mongo-express
+    image: mongo-express:1.0.2-20-alpine3.19
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongo:27017/
+      ME_CONFIG_BASICAUTH: false
+    networks:
+      - mongo
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.mongo-express.rule=Host("mongo-express.localhost")'
+      - 'traefik.http.services.mongo-express.loadbalancer.server.port=8081'
+      - 'traefik.http.routers.mongo-express.entrypoints=web'
+      - 'traefik.http.routers.mongo-express.tls=false'
+      - 'traefik.docker.network=mongo_network'
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: 'rabbitmq:management-alpine'
+    restart: unless-stopped
+    ports:
+      - '5672:5672'
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+    networks:
+      - rabbitmq
+    volumes:
+      - ./db-data/rabbitmq/:/var/lib/rabbitmq
+    deploy:
+      mode: replicated
+      replicas: 1
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.rabbitmq-painel.rule=Host("rabbitmq-painel.localhost")'
+      - 'traefik.http.routers.rabbitmq-painel.service=rabbitmq-painel'
+      - 'traefik.http.services.rabbitmq-painel.loadbalancer.server.port=15672'
+      - 'traefik.http.routers.rabbitmq.rule=Host("rabbitmq.localhost")'
+      - 'traefik.http.routers.rabbitmq.service=rabbitmq'
+      - 'traefik.http.services.rabbitmq.loadbalancer.server.port=5672'
+      - 'traefik.http.routers.rabbitmq.entrypoints=web'
+      - 'traefik.http.routers.rabbitmq.tls=false'
+      - 'traefik.docker.network=rabbitmq_network'
+
+networks:
+  mongo:
+    name: mongo_network
+    driver: bridge
+    internal: true
+  rabbitmq:
+    name: rabbitmq_network
+    driver: bridge
+    internal: true
+  traefik:
+    name: traefik_network
+    driver: bridge
