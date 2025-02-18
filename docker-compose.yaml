@@ -23,8 +23,6 @@ services:
     container_name: mongo
     image: mongo:4.2.24-bionic
     restart: unless-stopped
-    ports:
-      - '27017:27017'
     environment:
       MONGO_INITDB_DATABASE: logs
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -65,8 +63,6 @@ services:
     container_name: rabbitmq
     image: 'rabbitmq:management-alpine'
     restart: unless-stopped
-    ports:
-      - '5672:5672'
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: password
