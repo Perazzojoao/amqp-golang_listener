@@ -31,6 +31,11 @@ services:
       - mongo
     volumes:
       - ./db-data/mongo/:/data/db
+    healthcheck:
+      test: ['CMD', 'mongo', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   mongo-express:
     container_name: mongo-express
@@ -43,6 +48,9 @@ services:
       ME_CONFIG_BASICAUTH: false
     networks:
       - mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
     labels:
       - 'traefik.enable=true'
       - 'traefik.http.routers.mongo-express.rule=Host("mongo-express.localhost")'
@@ -64,6 +72,11 @@ services:
       - rabbitmq
     volumes:
       - ./db-data/rabbitmq/:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmqctl', 'status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       mode: replicated
       replicas: 1
@@ -72,12 +85,27 @@ services:
       - 'traefik.http.routers.rabbitmq-painel.rule=Host("rabbitmq-painel.localhost")'
       - 'traefik.http.routers.rabbitmq-painel.service=rabbitmq-painel'
       - 'traefik.http.services.rabbitmq-painel.loadbalancer.server.port=15672'
-      - 'traefik.http.routers.rabbitmq.rule=Host("rabbitmq.localhost")'
-      - 'traefik.http.routers.rabbitmq.service=rabbitmq'
-      - 'traefik.http.services.rabbitmq.loadbalancer.server.port=5672'
-      - 'traefik.http.routers.rabbitmq.entrypoints=web'
+      - 'traefik.http.routers.rabbitmq-painel.entrypoints=web'
       - 'traefik.http.routers.rabbitmq.tls=false'
       - 'traefik.docker.network=rabbitmq_network'
+
+  consumer:
+    container_name: consumer
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      QUEUE_NAME: 'logger'
+      RABBITHOST: 'amqp://admin:password@rabbitmq:5672/'
+    networks:
+      - mongo
+      - rabbitmq
+    depends_on:
+      mongo:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
 
 networks:
   mongo:
@@ -87,7 +115,7 @@ networks:
   rabbitmq:
     name: rabbitmq_network
     driver: bridge
-    internal: true
+    # internal: true
   traefik:
     name: traefik_network
     driver: bridge
