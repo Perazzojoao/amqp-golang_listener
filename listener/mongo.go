@@ -1,11 +1,10 @@
-package database
+package listener
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -19,8 +18,6 @@ type EventPayload struct {
 	Url           string      `json:"url" bson:"url,omitempty"`
 	TimeToProcess int         `json:"timeToProcess" bson:"time_to_process,omitempty"`
 	Data          interface{} `json:"data" bson:"data,omitempty"`
-	CreatedAt     time.Time   `bson:"created_at" json:"created_at"`
-	UpdatedAt     time.Time   `bson:"updated_at" json:"updated_at"`
 }
 
 func NewEventPayload(data []byte) EventPayload {
@@ -28,25 +25,25 @@ func NewEventPayload(data []byte) EventPayload {
 	if err := json.Unmarshal(data, &event); err != nil {
 		return EventPayload{}
 	}
-	event.CreatedAt = time.Now()
-	event.UpdatedAt = time.Now()
 	return event
 }
 
 type Mongo struct {
 	uri    string
+	Config *Config
 	Client *mongo.Client
 }
 
-func NewMongo(uri string) *Mongo {
-	return &Mongo{uri: uri}
+func NewMongo(uri string, config *Config) *Mongo {
+	return &Mongo{uri: uri, Config: config}
 }
 
 func (m *Mongo) Connect(ctx context.Context) {
+	c := m.Config
 	clientOptions := options.Client().ApplyURI(m.uri)
 	clientOptions.Auth = &options.Credential{
-		Username: "admin",
-		Password: "password",
+		Username: c.MongoUsername,
+		Password: c.MongoPassword,
 	}
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
@@ -65,7 +62,8 @@ func (m *Mongo) Disconnect(ctx context.Context) {
 }
 
 func (m *Mongo) InsertOne(ctx context.Context, collection string, payload EventPayload) error {
-	c := m.Client.Database("logs").Collection(collection)
+	config := m.Config
+	c := m.Client.Database(config.MongoDatabase).Collection(collection)
 	_, err := c.InsertOne(ctx, payload)
 	if err != nil {
 		return err
