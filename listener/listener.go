@@ -8,23 +8,22 @@ import (
 	"syscall"
 	"time"
 
-	db "github.com/Perazzojoao/amqp-golang_listener/database"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Listener struct {
 	Config   *Config
-	Database *db.Mongo
+	Database *Mongo
 }
 
 func NewListener(config *Config) *Listener {
-	return &Listener{Config: config, Database: db.NewMongo(config.MongoUri)}
+	return &Listener{Config: config, Database: NewMongo(config.MongoUri, config)}
 }
 
 func (l *Listener) Listen() {
 	// Connect to MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	defer cancel() // Connect to MongoDB
 
 	l.Database.Connect(ctx)
 	defer l.Database.Disconnect(context.TODO())
@@ -70,8 +69,9 @@ func (l *Listener) Listen() {
 			if !ok {
 				log.Printf("Channel closed")
 			}
-			payload := db.NewEventPayload(d.Body)
-			err := l.Database.InsertOne(context.Background(), "logs", payload)
+			payload := NewEventPayload(d.Body)
+			collection := l.Config.MongoCollection
+			err := l.Database.InsertOne(context.Background(), collection, payload)
 			if err != nil {
 				log.Printf("Failed to insert a document: %v", err)
 			}
