@@ -3,9 +3,13 @@ on:
   workflow_dispatch:
   pull_request: 
     types: [closed]
+    paths: 
+      - 'listener/**'
     branches:
       - main
   push:
+    paths: 
+      - 'listener/**'
     branches:
       - main
 jobs:
