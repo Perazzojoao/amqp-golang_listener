@@ -2,6 +2,7 @@ package listener
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -70,6 +71,11 @@ func (l *Listener) Listen() {
 				log.Printf("Channel closed")
 			}
 			payload := NewEventPayload(d.Body)
+			if payload.UserId == "" {
+				respondOnError(ch, d, "Missing user_id in the payload")
+				continue
+			}
+
 			collection := l.Config.MongoCollection
 			err := l.Database.InsertOne(context.Background(), collection, payload)
 			if err != nil {
@@ -87,4 +93,22 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Panicf("%s: %s", msg, err)
 	}
+}
+
+func respondOnError(ch *amqp.Channel, d amqp.Delivery, errMsg string) {
+	log.Printf("Error: %s", errMsg)
+	publishErr := ch.Publish(
+		"",        // exchange
+		d.ReplyTo, // routing key
+		false,     // mandatory
+		false,     // immediate
+		amqp.Publishing{
+			ContentType:   "text/plain",
+			CorrelationId: d.CorrelationId,
+			Body:          []byte(fmt.Sprintf(`{"error": "%s"}`, errMsg)),
+		})
+	if publishErr != nil {
+		log.Printf("Failed to publish error message: %v", publishErr)
+	}
+	d.Nack(false, false) // Reject the message whitout requeue
 }
