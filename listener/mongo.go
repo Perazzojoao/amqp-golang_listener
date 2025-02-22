@@ -5,27 +5,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-type EventPayload struct {
-	UserAgent     string      `json:"userAgent" bson:"user_agent,omitempty"`
-	UserId        string      `json:"userId" bson:"user_id,omitempty"`
-	Ip            string      `json:"ip" bson:"ip,omitempty"`
-	RequestMethod string      `json:"requestMethod" bson:"request_method,omitempty"`
-	Url           string      `json:"url" bson:"url,omitempty"`
-	TimeToProcess int         `json:"timeToProcess" bson:"time_to_process,omitempty"`
-	Data          interface{} `json:"data" bson:"data,omitempty"`
+type PayloadWrapper struct {
+	Pattern string       `json:"pattern"`
+	Data    EventPayload `json:"data"`
 }
 
+type EventPayload struct {
+	UserAgent     string `json:"userAgent" bson:"user_agent,omitempty"`
+	UserId        int    `json:"userId" bson:"user_id" validate:"required,number"`
+	Ip            string `json:"ip" bson:"ip,omitempty"`
+	RequestMethod string `json:"requestMethod" bson:"request_method,omitempty"`
+	Url           string `json:"url" bson:"url,omitempty"`
+	TimeToProcess int    `json:"timeToProcess" bson:"time_to_process,omitempty"`
+	Data          string `json:"data" bson:"data,omitempty"`
+}
+
+var validate = validator.New(validator.WithRequiredStructEnabled())
+
 func NewEventPayload(data []byte) EventPayload {
-	var event EventPayload
-	if err := json.Unmarshal(data, &event); err != nil {
+	var wrapper PayloadWrapper
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		fmt.Printf("Error unmarshaling wrapper: %v\n", err)
 		return EventPayload{}
 	}
-	return event
+
+	return wrapper.Data
+}
+
+func ValidatePayload(payload *EventPayload) error {
+	if err := validate.Struct(payload); err != nil {
+		return fmt.Errorf("error validating payload: %v", err)
+	}
+
+	return nil
 }
 
 type Mongo struct {
@@ -63,10 +82,23 @@ func (m *Mongo) Disconnect(ctx context.Context) {
 
 func (m *Mongo) InsertOne(ctx context.Context, collection string, payload EventPayload) error {
 	config := m.Config
-	c := m.Client.Database(config.MongoDatabase).Collection(collection)
-	_, err := c.InsertOne(ctx, payload)
-	if err != nil {
-		return err
+	data := parsedData{
+		Info:      payload,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
+
+	c := m.Client.Database(config.MongoDatabase).Collection(collection)
+	_, err := c.InsertOne(ctx, data)
+	if err != nil {
+		return fmt.Errorf("error inserting document: %v", err)
+	}
+
 	return nil
+}
+
+type parsedData struct {
+	Info      EventPayload `json:"info" bson:"info"`
+	CreatedAt time.Time    `json:"created_at" bson:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at" bson:"updated_at"`
 }
