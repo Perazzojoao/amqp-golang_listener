@@ -2,6 +2,7 @@ package listener
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -51,7 +52,7 @@ func (l *Listener) Listen() {
 	msgs, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer
-		true,   // auto-ack
+		false,  // auto-ack
 		false,  // exclusive
 		false,  // no-local
 		false,  // no-wait
@@ -60,6 +61,7 @@ func (l *Listener) Listen() {
 	failOnError(err, "Failed to register a consumer")
 
 	log.Printf(" [*] Waiting for messages. Press CTRL+C to exit.")
+	fmt.Println()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -70,10 +72,16 @@ func (l *Listener) Listen() {
 			if !ok {
 				log.Printf("Channel closed")
 			}
+
 			payload := NewEventPayload(d.Body)
-			if payload.UserId == "" {
-				respondOnError(ch, d, "Missing user_id in the payload")
+			if err := ValidatePayload(&payload); err != nil {
+				respondOnError(ch, d, err.Error())
 				continue
+			}
+
+			err = d.Ack(false) // Acknowledge the message
+			if err != nil {
+				log.Printf("Failed to acknowledge the message: %v", err)
 			}
 
 			collection := l.Config.MongoCollection
@@ -97,18 +105,20 @@ func failOnError(err error, msg string) {
 
 func respondOnError(ch *amqp.Channel, d amqp.Delivery, errMsg string) {
 	log.Printf("Error: %s", errMsg)
+	errorMessage := map[string]string{"error": errMsg}
+	response, _ := json.Marshal(errorMessage)
 	publishErr := ch.Publish(
 		"",        // exchange
 		d.ReplyTo, // routing key
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
-			ContentType:   "text/plain",
+			ContentType:   "application/json",
 			CorrelationId: d.CorrelationId,
-			Body:          []byte(fmt.Sprintf(`{"error": "%s"}`, errMsg)),
+			Body:          []byte(response),
 		})
 	if publishErr != nil {
 		log.Printf("Failed to publish error message: %v", publishErr)
 	}
-	d.Nack(false, false) // Reject the message whitout requeue
+	d.Reject(false) // Reject the message whitout requeue
 }
