@@ -1,14 +1,10 @@
 name: Building and pushing Logger service image to Docker Hub
 on:
   workflow_dispatch:
-  pull_request: 
-    types: [closed]
-    paths: 
-      - 'listener/**'
-    branches:
-      - main
   push:
-    paths: 
+    tags:
+      - 'v*.*.*'
+    paths:
       - 'listener/**'
     branches:
       - main
@@ -34,4 +30,4 @@ jobs:
         run: |
           docker login -u perazzojoao -p ${{ secrets.DOCKER_HUB_TOKEN }}
           docker push perazzojoao/logger-service:latest
-          docker push perazzojoao/logger-service:${{ env.IMAGE_TAG }}
+          docker push perazzojoao/logger-service:${{ github.ref }}
