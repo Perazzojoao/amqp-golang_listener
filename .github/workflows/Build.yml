@@ -30,4 +30,4 @@ jobs:
         run: |
           docker login -u perazzojoao -p ${{ secrets.DOCKER_HUB_TOKEN }}
           docker push perazzojoao/logger-service:latest
-          docker push perazzojoao/logger-service:${{ github.ref }}
+          docker push perazzojoao/logger-service:${{ github.ref_name }}
