@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v'
-    branches:
-      - main
 jobs:
   building:
     name: Building Auth service image
