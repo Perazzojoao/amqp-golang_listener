@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v'
+      - 'v*'
 jobs:
   building:
     name: Building Auth service image
