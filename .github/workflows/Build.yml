@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v'
     branches:
       - main
 jobs:
@@ -15,17 +15,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Definir TAG da imagem
-        run: echo "IMAGE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226
 
-      - name: Build Logger service image
-        run: docker build -t perazzojoao/logger-service:latest -f ./Dockerfile .
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3.3.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Push Logger service image to Docker Hub
-        run: |
-          docker login -u perazzojoao -p ${{ secrets.DOCKER_HUB_TOKEN }}
-          docker push perazzojoao/logger-service:latest
-          docker push perazzojoao/logger-service:${{ github.ref_name }}
+      - name: Build and push images tags
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            perazzojoao/logger-service:latest
+            perazzojoao/logger-service:${{ github.ref_name }}
